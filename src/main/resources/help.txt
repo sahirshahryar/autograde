@@ -1,0 +1,378 @@
+//
+// This file is part of AutoGrade, licensed under the MIT License (MIT).
+//
+// Copyright (c) Sahir Shahryar <https://github.com/sahirshahryar>
+//
+// Designed for use by the Computer Science Department at the University of Georgia,
+// but free of proprietary technologies and solutions to class assignments.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to
+// deal in the Software without restriction, including without limitation the
+// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+// sell copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+// IN THE SOFTWARE.
+//
+
+//
+// Articles used by the help command.
+//
+// @author  Sahir Shahryar
+// @since   Thursday, July 12, 2018
+// @version 1.0.0
+//
+
+let DELETE_ARGS:   Map = #delete-args   + FLAGS:delete
+let DESELECT_ARGS: Map = #deselect-args + FLAGS:deselect
+let EXIT_ARGS:     Map = #exit-args     + FLAGS:exit
+let EXPORT_ARGS:   Map = #export-args   + FLAGS:export
+let FILE_ARGS:     Map = #file-args     + FLAGS:file
+let HELP_ARGS:     Map = #help-args     + FLAGS:help
+let RUN_ARGS:      Map = #run-args      + FLAGS:run
+let SELECT_ARGS:   Map = #select-args   + FLAGS:select
+let SAVE_ARGS:     Map = #save-args     + FLAGS:save
+let SORT_ARGS:     Map = #sort-args     + FLAGS:sort
+let VIEW_ARGS:     Map = #view-args     + FLAGS:view
+
+let HELP_BASE: Article = #base + #fundamentals
+
+# base: Article
+(GREEN)Command list:
+(MAPS:COMMAND_DESCRIPTIONS)
+
+# fundamentals: Article
+To work with auto-graded submissions, you select students using the *select* command.
+After that, you can use the commands listed above to perform actions on the
+submissions of the students you've selected. Type *help* *select* to see how to use
+the *select* command to its fullest potential.
+
+
+You can chain commands together on one line by using a piping symbol (`|`)
+between them. While this doesn't quite function the same way as it does in bash or other
+shells, it does mute the output of all but the last command, and when combined with each
+command's shorthand version, is a very fast way to work with AutoGrade. So, for example,
+to perform an entire export workflow, you could type the command
+(CYAN)s * | e grades.txt | q(RESET).
+
+
+# delete: Article
+Deletes the submission files of the selected students.
+
+
+> Aliases:
+
+    (ALIASES:delete)
+
+
+> Syntax:
+
+    $ (YELLOW)delete [--grade-too] [--confirm-all]
+
+
+> Flags:
+
+(MAP:DELETE_ARGS)
+
+
+
+
+# deselect: Article
+Removes students from your current selection. Useful if you accidentally select a
+student you didn't intend to select.
+
+
+> Aliases:
+
+    (ALIASES:deselect)
+
+
+> Syntax:
+
+    $ (YELLOW)deselect <filter|*> [--invert]
+
+
+> Arguments:
+
+(MAP:DESELECT_ARGS)
+
+
+# deselect-args: Map
+(KEY)<filter|*>
+(VALUE)A filter specifying which students should be deselected, or `*` to deselect all
+students. See *help* *select* to see how to use the filter syntax here.
+
+
+
+
+# exit: Article
+Exits the program.
+
+
+> Aliases:
+
+    (ALIASES:exit)
+
+
+> Syntax:
+
+    $ (YELLOW)exit [--discard] [--files-too]
+
+> Flags:
+
+(MAP:EXIT_FLAGS)
+
+
+
+
+# export: Article
+Exports the selected students' grades to a file or directory of your choice.
+
+
+> Aliases:
+
+    (ALIASES:export)
+
+
+> Syntax:
+
+    $ (YELLOW)export [<file>|<dir>/] [--overwrite] [--grades-only|--no-source-names]
+
+
+> Arguments:
+
+(MAP:EXPORT_ARGS)
+
+
+Note that *--grades-only* and *--no-source-names* cannot be used at the same time, since
+they contradict each other (*--no-source-names* is only applicable when auto-generated
+feedback is being exported, which *--grades-only* disables).
+
+
+# export-args: Map
+(KEY)[<file>|<dir>/]
+(VALUE)Either a file or a directory. If this value is a file, all grades will be exported
+to a single text file with the given name. If it is a directory, each student will
+receive their own file named after them within the given directory. Specify a directory
+by explicitly putting a forward slash (`/`) at the end of the name.
+
+
+
+
+# file: Article
+Prints the contents of the given file, or opens them in a text editor.
+
+
+> Aliases:
+
+    (ALIASES:file)
+
+
+> Syntax:
+
+    $ (YELLOW)file [<student>/<name>] [--emacs|--vi]
+
+
+(CYAN)Arguments:
+
+(MAP:FILE_ARGS)
+
+Specifying either *--emacs* or *--vi* allows you to open the given file in emacs or vim
+instead of having it dump in the terminal. Your preference is remembered until you
+specify a different editor, or until the program exits. If no preference is made,
+made, AutoGrade will attempt to find the *pygmentize* command, printing the file to
+the terminal with syntax highlighting. If it's not available, *cat* will be used instead.
+Naturally, the *--emacs* and *--vi* flags cannot be used at the same time as each other.
+
+
+# file-args: Map
+(KEY)[<student>/<name>]
+(VALUE)The student's name (if more than one student is selected), and the name of the
+submission file (if each submission has more than one file). This command will run
+without issue as long as you give enough information for it to resolve to exactly one
+file. If only one student is selected and that student has only one file, simply typing
+*file* will work just fine.
+
+
+
+
+# help: Article
+Shows command usage.
+
+> Aliases:
+
+    (ALIASES:help)
+
+
+> Syntax:
+
+    $ (YELLOW)help [<command>]
+
+
+> Arguments:
+
+(MAP:HELP_ARGS)
+
+
+# help-args: Map
+(KEY)[<command>]
+(VALUE)The command to get information for. Omit this argument to see basic information
+about AutoGrade.
+
+
+
+# list: Article
+Provides a list of all students that can be selected.
+
+
+> Aliases:
+
+    (ALIASES:list)
+
+
+> Syntax:
+
+    $ (YELLOW)list
+
+# run: Article
+Runs a student's submission individually.
+
+
+> Aliases:
+
+    (ALIASES:run)
+
+
+> Syntax:
+
+    $ (YELLOW)run [<student>] [--manual|--stepped]
+
+
+> Arguments:
+
+(MAP:RUN_ARGS)
+
+
+
+# run-args: Map
+(KEY)[<student>]
+(VALUE)The name of the student whose submission is to be run, if necessary. If you have
+only one student selected via the *select* command, then this argument is not necessary.
+Otherwise, specify a student using the same syntax as for the *select* command. If more
+than one student matches your selection, only the first one will be used.
+
+
+
+# select: Article
+Selects the given students for editing with the other commands.
+
+
+> Aliases:
+
+    (ALIASES:select)
+
+
+> Syntax:
+
+    $ (YELLOW)select <filter|*> [--invert] [--append]
+
+
+> Arguments:
+
+(MAP:SELECTOR_ARGS)
+
+
+> Selector syntax:
+
+First and foremost, it is entirely possible to use spaces in the filter, so typing full
+names such as (CYAN)select John Doe(RESET) will work just fine.
+
+
+You can use the following syntax elements to select multiple students at once:
+
+(MAP:#selector-syntax)
+
+
+Once you find a few of those useful, you can use multiple selectors in conjunction by
+separating them with commas. So, for example, using (CYAN)select @incomplete, <50(RESET)
+selects all students that either didn't get graded at all or scored under 50 points.
+Commas represent a logical OR; semicolons can be used for a logical AND. So, using
+(CYAN)select >50;<75(RESET) selects all students who scored between 50 and 75 points.
+OR takes precedence over AND, and there is no grouping.
+
+
+# selector-args: Map
+(KEY)<filter|*>
+(VALUE)A filter specifying which students should be selected, or `*` to select all
+students.
+
+
+# selector-syntax: Map
+(KEY)*
+(VALUE)Selects all students.
+(KEY)[name]
+(VALUE)Selects all students whose full names contain the given text (case-insensitive).
+(KEY)@incomplete
+(VALUE)Selects all students whose submissions could not be graded due to errors.
+(KEY)@complete
+(VALUE)Selects all students whose submissions were graded successfully.
+(KEY)=[grade]
+(VALUE)Selects all students whose score is equal to *grade* (which is some number of your
+choosing).
+(KEY)>[grade]
+(VALUE)Selects all students whose score is greater than *grade*.
+(KEY)<[grade]
+(VALUE)Selects all students whose score is less than *grade*.
+(KEY)![selector]
+(VALUE)Negates the given selector, which can be any of the conditions above. For example,
+using *!<50* (score not less than 50) chooses all scores greater than or equal to 50.
+Using *!e* chooses all students without an E in their name... if you somehow find that
+necessary.
+
+
+
+
+# save: Article
+Saves the given file, preventing it from being automatically deleted by AutoGrade upon
+program exit. All submissions that are successfully graded are marked for automatic
+deletion, so you do not need to manually save submissions that couldn't be graded.
+
+> Aliases:
+
+    (ALIASES:save)
+
+
+> Syntax:
+
+    $ (YELLOW)save [<<student>/<file>>|*]
+
+
+> Arguments:
+
+(MAP:SAVE_ARGS)
+
+
+
+# save-args: Map
+(KEY)[<<student>/<file>>|*]
+(VALUE)Optionally, you can provide a specific file (or files) to save. Use `*` to save
+all files. If you specify just a file, that file will be saved for all students in your
+selection. If you specify just a name (type in the student's name, followed by a slash),
+all of that student's files will be saved. If you specify both, only that one specific
+file will be saved. If this argument is not given at all (i.e., you just type in *save*),
+all files from all selected students will be saved.
+
+
+
+# sort:
+Sorts the current selection by either name or grade.
