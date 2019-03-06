@@ -76,6 +76,8 @@ public enum Channel {
 
     private static Scanner tempScanner = null;
 
+    private static boolean muteAll = false;
+
 
     public static void instituteScanner(Scanner scanner) {
         tempScanner = scanner;
@@ -94,15 +96,31 @@ public enum Channel {
     }
 
     public boolean canSpeak() {
-        return this.ordinal() >= currentSetting.ordinal();
+        return !muteAll && this.ordinal() >= currentSetting.ordinal();
+    }
+
+    public void say() {
+        this.say("");
     }
 
     public void say(Object line) {
+        this.sayNoNewline(line + "\n");
+    }
+
+    public void sayNoNewline(Object line) {
         if (!this.canSpeak()) {
             return;
         }
 
         out.print(line);
+    }
+
+    public static void muteAll() {
+        muteAll = true;
+    }
+
+    public static void unmuteAll() {
+        muteAll = false;
     }
 
 

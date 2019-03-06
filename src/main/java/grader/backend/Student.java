@@ -39,7 +39,7 @@ import java.util.ArrayList;
  * @since   Tuesday, April 24, 2018
  * @version 1.0.0
  */
-public class Student {
+public class Student implements Comparable<Student> {
 
     /**
      * The student's name.
@@ -62,7 +62,7 @@ public class Student {
      * If the script throws a ManualGradingError when grading this student's submission,
      * it will be stored in this variable for further analysis.
      */
-    private ManualGradingError error;
+    private Throwable error;
 
 
     /**
@@ -131,6 +131,19 @@ public class Student {
      */
     public String getTrueName() {
         return this.name;
+    }
+
+
+    /**
+     * Attempts to extract the last name of a student from their name. This may not
+     * always work, especially if the student has a last name like "de la Cruz", but
+     * it's fine for 99% of names.
+     *
+     * @return (String) the last word in the student's name.
+     */
+    public String getLastName() {
+        String[] split = this.name.split(" ");
+        return split[split.length - 1];
     }
 
 
@@ -216,7 +229,7 @@ public class Student {
      *
      * @param e (ManualGradingError) the error that occurred.
      */
-    public void appendException(ManualGradingError e) {
+    public void appendException(Throwable e) {
         this.error = e;
 
         if (!this.saveManuallySet) {
@@ -260,7 +273,8 @@ public class Student {
     }
 
 
-    public void cleanUpDuplicates() {
+    public int cleanUpDuplicates() {
+        ArrayList<ELCSubmission> submissionsToRemove = new ArrayList<>();
         for (ELCSubmission i : this.entries) {
             for (ELCSubmission j : this.entries) {
                 if (i == j) {
@@ -268,17 +282,16 @@ public class Student {
                 }
 
                 if (i.getFileName().equalsIgnoreCase(j.getFileName())) {
-                    this.entries.remove(i.newerThan(j) ? j : i);
-
-                    /**
-                     * Act recursively then exit, because bad things happen if you try to
-                     * iterate on a list while simultaneously modifying that list.
-                     */
-                    this.cleanUpDuplicates();
-                    break;
+                    submissionsToRemove.add(i.newerThan(j) ? j : i);
                 }
             }
         }
+        
+        for (ELCSubmission submission : submissionsToRemove) {
+            this.entries.remove(submission);
+        }
+
+        return submissionsToRemove.size();
     }
 
 
@@ -314,6 +327,11 @@ public class Student {
         return false;
     }
 
+
+    @Override
+    public int compareTo(Student other) {
+        return this.getLastName().compareTo(other.getLastName());
+    }
 
     /**
      * Determines the name of a student by scraping it out of eLC's auto-generated

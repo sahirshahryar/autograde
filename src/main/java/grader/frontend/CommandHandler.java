@@ -28,6 +28,7 @@
 package grader.frontend;
 
 import grader.*;
+import grader.articles.ArticleManager;
 import grader.backend.ManualGradingError;
 import grader.backend.Script;
 import grader.backend.Student;
@@ -35,14 +36,15 @@ import grader.flag.FlagParser;
 import grader.flag.FlagSet;
 import grader.util.Helper;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
+import java.io.File;
+import java.util.*;
 
 import static grader.frontend.Color.*;
+import static grader.frontend.SortOrder.*;
 
 /**
- * This class handles all of the commands that
+ * This class handles the command-line interface presented to the user after grading
+ * is complete.
  *
  * @author  Sahir Shahryar <sahirshahryar@uga.edu>
  * @since   Thursday, April 26, 2018
@@ -51,7 +53,7 @@ import static grader.frontend.Color.*;
 public class CommandHandler {
 
     /**
-     *
+     * This map contains a list of all valid aliases for each command.
      */
     public static final HashMap<String, String[]> COMMAND_ALIASES
             = new HashMap<String, String[]>() {{
@@ -71,7 +73,7 @@ public class CommandHandler {
 
 
     /**
-     *
+     * This map contains a short description of each of the commands.
      */
     private static final HashMap<String, String> COMMAND_DESCRIPTIONS
             = new HashMap<String, String>() {{
@@ -91,7 +93,7 @@ public class CommandHandler {
 
 
     /**
-     * s * | so n | v -g
+     * This map contains the list of usable flags for each command.
      */
     public static final HashMap<String, FlagSet> COMMAND_FLAGSETS
             = new HashMap<String, FlagSet>() {{
@@ -133,10 +135,20 @@ public class CommandHandler {
                             .describeAs("Exports only the grades of the selected " +
                                         "students (not the feedback they received)")
                         .accepts("no-source-names")
-                            .withAliases("n", "s")
+                            .withAliases("n")
                             .describeAs("Removes source names from the feedback "
                                         + "(useful for copying and pasting feedback)")
+                        .accepts("separate-files")
+                            .withAliases("s")
+                            .describeAs("Exports each student's feedback into its own "
+                                        + "file. Cannot be used in conjunction with " +
+                                    "*--csv*")
+                        .accepts("csv")
+                            .withAliases("c")
+                            .describeAs("Exports the results to a CSV file. Cannot be " +
+                                    "used in conjunction with *--separate-files*")
                         .disallowTogether("grades-only", "no-source-names")
+                        .disallowTogether("csv", "separate-files")
                 );
 
                 put("file", new FlagSet()
@@ -178,8 +190,8 @@ public class CommandHandler {
                 );
 
                 put("sort", new FlagSet()
-                        .accepts("reverse")
-                            .withAliases("r")
+                        .accepts("descending")
+                            .withAliases("d", "r", "reverse")
                             .describeAs("Reverses the order in which entries are shown")
                 );
 
@@ -198,7 +210,9 @@ public class CommandHandler {
 
 
     /**
-     *
+     * This map contains the list of commands that can be used even if the user has no
+     * students selected. All other commands require the student to select at least one
+     * student first.
      */
     private static final ArrayList<String> USABLE_WITHOUT_SELECTION
             = new ArrayList<String>() {{
@@ -211,15 +225,13 @@ public class CommandHandler {
 
 
     /**
-     *
+     * Represents the list of selected students.
      */
     private static StudentSelection currentSelection = null;
-    
-    private static EditorPreference preferredEditor = null;
 
 
     /**
-     *
+     * Handles the command-line interface (CLI) loop for AutoGrade.
      */
     public static void startAcceptingCommands() {
         if (AutoGrade.SHOW_HELP) {
@@ -235,10 +247,10 @@ public class CommandHandler {
                         = commandInput.contains("|") ? commandInput.split(" *\\| *")
                                                      : new String[] { commandInput };
 
-                
+                Channel.muteAll();
                 for (int i = 0; i < piped.length; ++i) {
                     if (i + 1 == piped.length) {
-
+                        Channel.unmuteAll();
                     }
 
                     String pipedCommand = piped[i];
@@ -289,9 +301,6 @@ public class CommandHandler {
                         case "select":   select(args);
                                          break;
 
-                        case "save":     save(args);
-                                         break;
-
                         case "sort":     sort(args);
                                          break;
 
@@ -307,30 +316,44 @@ public class CommandHandler {
             }
 
             catch (final RuntimeException e) {
-                // ConsoleOutput.unmute();
+                Channel.unmuteAll();
 
                 if (e instanceof CommandUsageException) {
                     CommandUsageException ex = (CommandUsageException) e;
 
                     if (ex.hasDescription()) {
-                        System.out.println(RED + ex.getDescription() + RESET);
+                        Channel.INTERACTION.say(RED + ex.getDescription() + RESET);
                     }
 
                     String command = ex.getCommand();
                     help(new FlagParser(new FlagSet(), command));
                 } else {
-                    System.out.println(RED + e.getMessage() + RESET);
+                    Channel.INTERACTION.say(RED + e.getMessage() + RESET);
                 }
+
+                if (AutoGrade.SHOW_STACK_TRACES) {
+                    e.printStackTrace();
+                }
+            }
+
+            for (FlagSet f : COMMAND_FLAGSETS.values()) {
+                f.clear();
             }
         }
     }
 
 
     /**
+     * Maps the given command input to an actual command. The string given to this
+     * method would be the first 'word' inputted by the user; for instance, if the
+     * user types in
      *
+     * $ s *
      *
-     * @param input
-     * @return
+     * this method would receive "s" and would return "select".
+     *
+     * @param input (String) the command the user typed in
+     * @return (String) the primary name of this command, if it exists
      */
     private static String mapAliasToCommand(String input) {
         for (String command : COMMAND_ALIASES.keySet()) {
@@ -350,9 +373,11 @@ public class CommandHandler {
 
 
     /**
+     * Deletes the submissions of the selected students.
+     *
      * autograde $ delete [--grade-too] [--confirm-all]
      *
-     * @param args
+     * @param args (FlagParser) the arguments given by the user.
      */
     private static void delete(FlagParser args) {
 
@@ -360,9 +385,11 @@ public class CommandHandler {
 
 
     /**
+     * Deselects the given students.
+     *
      * autograde $ deselect <filter|*> [--invert]
      *
-     * @param args
+     * @param args (FlagParser) the arguments given by the user.
      */
     private static void deselect(FlagParser args) {
 
@@ -370,9 +397,11 @@ public class CommandHandler {
 
 
     /**
+     * Exits AutoGrade.
+     *
      * autograde $ exit [--discard]
      *
-     * @param args
+     * @param args (FlagParser) the arguments given by the user.
      */
     private static void exit(FlagParser args) {
         // TODO: Flesh out
@@ -381,7 +410,10 @@ public class CommandHandler {
 
 
     /**
-     * autograde $ export [<file>|<dir>] [--separate-files]
+     * Exports AutoGrade's findings to a text file or CSV.
+     *
+     * autograde $ export [<file>|<dir>] [--separate-files|--csv]
+     *             [--overwrite] [--grades-only|--no-source-names]
      *
      * @param args
      */
@@ -390,7 +422,87 @@ public class CommandHandler {
     }
 
     private static void file(FlagParser args) {
+        boolean preferenceChanged = true;
+        if (args.hasFlag("vi")) {
+            EditorPreference.PREFERENCE = EditorPreference.VI;
+        } else if (args.hasFlag("emacs")) {
+            EditorPreference.PREFERENCE = EditorPreference.EMACS;
+        } else if (args.hasFlag("console")) {
+            EditorPreference.PREFERENCE = EditorPreference.NONE;
+        } else {
+            preferenceChanged = false;
+        }
 
+        if (preferenceChanged) {
+            String pref = (EditorPreference.PREFERENCE == EditorPreference.NONE ?
+                             "the console"
+                           : EditorPreference.PREFERENCE.name().toLowerCase());
+
+            Channel.INTERACTION.say("Text editor set to " + pref + " for this session.");
+        }
+
+        Student student = getSingularStudent(args);
+
+        int submissions = student.getSubmissions().size();
+        switch (submissions) {
+            case 0:
+                throw new RuntimeException(student.getName() + " has no submissions!");
+
+            case 1:
+                File file = student.getSubmissions().get(0).getFile();
+                String address = file.getAbsolutePath();
+                EditorPreference.PREFERENCE.openEditor(address);
+                break;
+
+            default:
+                Channel.INTERACTION.say("Student has " + submissions
+                        + " files to choose from. Please specify the number you want,"
+                        + " or 'cancel' to cancel:");
+
+                for (int i = 0; i < submissions; ++i) {
+                    Channel.INTERACTION.say("  " + CYAN.toString() + (i + 1) + RESET + ". "
+                            + student.getSubmissions().get(i).getFileName());
+                }
+
+                int selectionIndex;
+
+                do {
+                    Channel.INTERACTION.sayNoNewline(RESET + "autograde:file $ " + PURPLE);
+                    String input = Channel.INTERACTION.ask().trim();
+
+                    if (input.isEmpty()) {
+                        continue;
+                    }
+
+                    if (input.matches("(?i)(e(xit)?|c(ancel)?|q(uit)?|x)")) {
+                        return;
+                    }
+
+                    if (!input.matches("-?\\d+")) {
+                        if (input.matches("-?\\d*\\.\\d+")) {
+                            Channel.INTERACTION.say(RED + "Please enter whole numbers only!"
+                                    + RESET);
+                        } else {
+                            Channel.INTERACTION.say(RED + "Please input a number!" + RESET);
+                        }
+
+                        continue;
+                    }
+
+                    selectionIndex = Integer.parseInt(input);
+                    if (selectionIndex <= 0 || selectionIndex > submissions) {
+                        Channel.INTERACTION.say(RED + "Please input a number between 1 and "
+                            + submissions + "!");
+                        continue;
+                    }
+
+                    break;
+                } while (true);
+
+                file = student.getSubmissions().get(selectionIndex - 1).getFile();
+                address = file.getAbsolutePath();
+                EditorPreference.PREFERENCE.openEditor(address);
+        }
     }
 
 
@@ -401,16 +513,19 @@ public class CommandHandler {
      */
     public static void help(FlagParser args) {
         if (args.length() == 0) {
-            System.out.println(GREEN + "Command list:" + RESET);
-            System.out.println(Helper.elegantPrintMap(COMMAND_DESCRIPTIONS));
+            Channel.INTERACTION.say(GREEN + "Command list:" + RESET);
+            Channel.INTERACTION.say(Helper.elegantPrintMap(COMMAND_DESCRIPTIONS));
+
+            Channel.INTERACTION.say("Type " + GREEN + "help <command>" + RESET +
+                    " for more information about a specific command.");
 
             if (args.hasFlag("no-fundamentals")) {
                 return;
             }
 
-            System.out.println();
-            System.out.println(GREEN + "Fundamentals" + RESET);
-            System.out.println("To work with auto-graded submissions, you select " +
+            Channel.INTERACTION.say();
+            Channel.INTERACTION.say(GREEN + "Fundamentals" + RESET);
+            Channel.INTERACTION.say("To work with auto-graded submissions, you select " +
                                "students using the " + CYAN + "select" + RESET +
                                " command. After that, you can use the commands " +
                                "listed above to perform actions on the submissions of " +
@@ -419,43 +534,65 @@ public class CommandHandler {
 
         else {
             String command = mapAliasToCommand(args.get(0));
+            ArticleManager am = AutoGrade.getArticles();
 
             switch (command) {
                 case "delete":
-                    System.out.println(GREEN + "delete" + RESET);
-                    System.out.println("Deletes a student's submission file.");
-                    System.out.println();
-
-                    System.out.println(CYAN + "  Aliases:");
-                    System.out.println(YELLOW + "    d" + RESET + ", " + YELLOW + "del");
-
-                    System.out.println(CYAN + "  Syntax:");
-                    System.out.println(RESET + "    $ " + YELLOW +
-                            "delete <student> [--grade-too] [--confirm-all]");
-                    System.out.println();
-
-                    System.out.println(CYAN + "Details:");
-                    System.out.println(YELLOW + "<student>" + "");
-
-                case "deselect":
-                case "errors":
-                case "exit":
-                case "export":
-                case "help":
-
+                    Channel.INTERACTION.say(am.getElement("ARTICLE:delete"));
                     break;
 
-                case "inspect":
+                case "deselect":
+                    Channel.INTERACTION.say(am.getElement("ARTICLE:deselect"));
+                    break;
 
+                case "exit":
+                    Channel.INTERACTION.say(am.getElement("ARTICLE:exit"));
+                    break;
+                    
+                case "export":
+                    Channel.INTERACTION.say(am.getElement("ARTICLE:export"));
+                    break;
+
+                case "file":
+                    Channel.INTERACTION.say(am.getElement("ARTICLE:file"));
+                    break;
+
+                case "help":
+                    Channel.INTERACTION.say(am.getElement("ARTICLE:help"));
                     break;
 
                 case "list":
+                    Channel.INTERACTION.say(am.getElement("ARTICLE:list"));
+                    break;
+
+                case "run":
+                    Channel.INTERACTION.say(am.getElement("ARTICLE:run"));
+                    break;
+
                 case "save":
+                    Channel.INTERACTION.say(am.getElement("ARTICLE:save"));
+                    break;
+
+                case "select":
+                    Channel.INTERACTION.say(am.getElement("ARTICLE:select"));
+                    break;
+
                 case "sort":
+                    Channel.INTERACTION.say(am.getElement("ARTICLE:sort"));
+                    break;
+
                 case "view":
+                    Channel.INTERACTION.say(am.getElement("ARTICLE:view"));
+                    break;
+
+                case "about":
+                    Channel.INTERACTION.say(GREEN + "AutoGrade 0.5.0(b)");
+                    Channel.INTERACTION.say(CYAN + "by Sahir Shahryar "
+                        + "<sahirshahryar@uga.edu>");
+                    break;
 
                 default:
-                    System.out.println("Unknown command '" + command + "'; " +
+                    Channel.INTERACTION.say("Unknown command '" + command + "'; " +
                             "use the 'help' command for a list of commands.");
             }
         }
@@ -471,58 +608,27 @@ public class CommandHandler {
                      + "names are censored.");
          }
 
-         if (args.length() > 0) {
+         if (args != null && args.length() > 0) {
              throw new CommandUsageException("list", "The list command does not accept "
                                                      + "any arguments.");
          }
 
-         ArrayList<String> list = new ArrayList<>();
-         for (Student student : AutoGrade.accessStudents().values()) {
-             list.add(GREEN + student.getName() + RESET);
-         }
+         StudentSelection sel = new StudentSelection(AutoGrade.accessStudents().values());
+         sel.sort(AutoGrade.getExportSortOrder());
 
-        System.out.println(list.size()
-                            + (list.size() == 1 ? " student: " : " students: ")
-                            + Helper.elegantPrintList(list));
+         ArrayList<String> names = sel.getNames();
+
+        Channel.INTERACTION.say(names.size()
+                            + (names.size() == 1 ? " student: " : " students: ")
+                            + Helper.elegantPrintList(names));
     }
 
 
     public static void run(FlagParser args) {
-        Student student = null;
-
-        if (args.length() == 0) {
-            switch (currentSelection.selectedStudents.size()) {
-                case 0:
-                    throw new RuntimeException("No students selected!");
-
-                case 1:
-                    student = AutoGrade.accessStudents()
-                              .get(currentSelection.selectedStudents.get(0));
-                    break;
-
-                default:
-                    throw new RuntimeException("Ambiguous selection: 'run' can only be "
-                            + "used on one student! Use 'run <name>' to specify a "
-                            + "student, or change your selection to only one student.");
-            }
-        } else {
-            String filter = Helper.join(" ", args.asArray());
-
-            for (Student s : AutoGrade.accessStudents().values()) {
-                if (parseFilter(filter, s)) {
-                    student = s;
-                    break;
-                }
-            }
-
-            if (student == null) {
-                throw new RuntimeException("No students match the given filter '" +
-                        filter + "'!");
-            }
-        }
+        Student student = getSingularStudent(args);
 
         if (args.hasFlag("manual")) {
-
+            // TODO: stepthrough execution
         } else {
             if (args.hasFlag("java")) {
                 throw new RuntimeException("The --java option can only be used with " +
@@ -581,9 +687,7 @@ public class CommandHandler {
         boolean invert = args.hasFlag("invert");
 
         int studentsAdded = 0;
-        for (String studentName : AutoGrade.accessStudents().keySet()) {
-            Student student = AutoGrade.accessStudents().get(studentName);
-
+        for (Student student : AutoGrade.accessStudents().values()) {
             boolean match = parseFilter(filter, student);
 
             /**
@@ -595,25 +699,29 @@ public class CommandHandler {
              * match is true, then the student should be added.
              */
             if (invert != match) {
-                currentSelection.addStudent(studentName);
+                currentSelection.addStudent(student);
                 ++studentsAdded;
             }
         }
+        
+        SortOrder sorting = AutoGrade.getExportSortOrder();
+        currentSelection.sort(sorting);
 
         ArrayList<String> selectedStudents = currentSelection.getNames();
         int size = selectedStudents.size();
 
         if (studentsAdded == 0 || size == 0) {
-            System.out.println("No students match the filter '" + filter + "'!");
+            Channel.INTERACTION.say(RED + "No students match the filter '"
+                    + filter + "'!" + RESET);
             if (size > 0) {
-                System.out.println("Selection remains as follows:");
+                Channel.INTERACTION.say("Selection remains as follows:");
             } else {
                 currentSelection = null;
                 return;
             }
         }
 
-        System.out.println(size + (size == 1 ? " student" : " students") + " selected: "
+        Channel.INTERACTION.say(size + (size == 1 ? " student" : " students") + " selected: "
                            + Helper.elegantPrintList(selectedStudents));
     }
 
@@ -629,12 +737,62 @@ public class CommandHandler {
 
 
     /**
-     * autograde $ sort [name|grade] [--descending]
+     * autograde $ sort [name|firstname|grade] [--descending]
      *
      * @param args
      */
     private static void sort(FlagParser args) {
-        
+        SortOrder mode = AutoGrade.getExportSortOrder();
+
+        if (args.hasFlag("reverse")) {
+            mode = mode.reverse();
+        }
+
+        if (args.length() == 1) {
+            String modeInput = args.get(0);
+            boolean descending = args.hasFlag("reverse");
+
+            if (modeInput.matches("(?i)(la?s?t?)?na?m?e?")) {
+                mode = descending ? LAST_NAME_DESC : LAST_NAME_ASC;
+            }
+
+            else if (modeInput.matches("(?i)fi?r?s?t?n?a?m?e?")) {
+                mode = descending ? FIRST_NAME_DESC : FIRST_NAME_ASC;
+            }
+
+            else if (modeInput.matches("(?i)gr?a?d?e?")) {
+                mode = descending ? GRADE_DESC : GRADE_ASC;
+            }
+
+            else {
+                throw new CommandUsageException("sort", "Unknown sorting mode '"
+                        + modeInput + "'");
+            }
+        } else if (args.length() > 1) {
+            throw new CommandUsageException("The 'sort' command accepts exactly " +
+                    "one argument");
+        }
+
+        if (mode == AutoGrade.getExportSortOrder()) {
+            Channel.INTERACTION.say("Students were already sorted " + mode + ".");
+            if (currentSelection != null) {
+                ArrayList<String> names = currentSelection.getNames();
+                Channel.INTERACTION.say(names.size()
+                        + (names.size() == 1 ? " student " : " students ")
+                        + "selected: " + Helper.elegantPrintList(names));
+            }
+        } else {
+            AutoGrade.setExportSortOrder(mode);
+            if (currentSelection == null) {
+                Channel.INTERACTION.say("Exported results will now be sorted " + mode + ".");
+            } else {
+                currentSelection.sort(mode);
+                ArrayList<String> names = currentSelection.getNames();
+                Channel.INTERACTION.say(names.size()
+                        + (names.size() == 1 ? " student " : " students ")
+                        + "selected: " + Helper.elegantPrintList(names));
+            }
+        }
     }
 
 
@@ -643,19 +801,20 @@ public class CommandHandler {
             throw new RuntimeException("No students selected!");
         }
 
-        for (String studentName : currentSelection) {
-            Student student = AutoGrade.accessStudents().get(studentName);
+        for (Student student : currentSelection) {
+            // Student student = AutoGrade.accessStudents().get(studentName);
 
             if (student.getFeedback() == null) {
-                System.out.println("Error scoring assignment from " + student.getName());
+                Channel.INTERACTION.say("Error scoring assignment from " + student.getName());
             }
 
             else {
                 if (args.hasFlag("grades-only")) {
-                    System.out.println(student.getFeedback().getGrade() + "\t\t"
+                    Channel.INTERACTION.say(student.getFeedback().getGrade() + "\t\t"
                                        + student.getName());
                 } else {
-                    System.out.println("Score for student " + student.getName() + ": "
+                    Channel.INTERACTION.say(YELLOW + "Score for student "
+                            + student.getName() + RESET + ": "
                             + student.getFeedback().getGrade());
 
                     ArrayList<String> sources = student.getFeedback().getAllSources();
@@ -668,15 +827,44 @@ public class CommandHandler {
                         }
 
                         if (sources.size() > 1) {
-                            System.out.println("    From source " + source + ":");
+                            Channel.INTERACTION.say("    From source " + source + ":");
                         }
 
                         for (String note : student.getFeedback().getNotes(source)) {
-                            System.out.println(itemIndentation + note);
+                            Channel.INTERACTION.say(itemIndentation + note);
                         }
                     }
                 }
             }
+        }
+    }
+
+    private static Student getSingularStudent(FlagParser args) {
+        if (args.length() == 0) {
+            if (currentSelection == null) {
+                throw new RuntimeException("No students selected!");
+            }
+
+            switch (currentSelection.selectedStudents.size()) {
+                case 1:
+                    return currentSelection.selectedStudents.get(0);
+
+                default:
+                    throw new RuntimeException("Ambiguous selection: 'run' can only be "
+                            + "used on one student! Use 'run <name>' to specify a "
+                            + "student, or change your selection to only one student.");
+            }
+        } else {
+            String filter = Helper.join(" ", args.asArray());
+
+            for (Student s : AutoGrade.accessStudents().values()) {
+                if (parseFilter(filter, s)) {
+                    return s;
+                }
+            }
+
+            throw new RuntimeException("No students match the given filter '" +
+                        filter + "'!");
         }
     }
 
@@ -736,38 +924,52 @@ public class CommandHandler {
         }
 
         if (token.startsWith(">")) {
+            boolean orEqual = token.substring(1).startsWith("=");
             try {
-                double score = Double.parseDouble(token.substring(1));
+                double score = Double.parseDouble(token.substring(orEqual ? 2 : 1));
 
                 if (student.getFeedback() == null) {
                     return false;
                 }
 
-                return negate != (student.getFeedback().getGrade() > score);
+                if (orEqual) {
+                    return negate != (student.getFeedback().getGrade() >= score);
+                } else {
+                    return negate != (student.getFeedback().getGrade() > score);
+                }
             }
 
             catch (final NumberFormatException e) {
-                throw new RuntimeException("Filter specifier >... requires a number " +
-                        "immediately thereafter; was given " + token
-                        + " instead (valid example: '>75.0')");
+                String symbol = (orEqual ? ">=" : ">");
+                throw new RuntimeException("Filter specifier " + symbol
+                        + "... requires a number immediately afterward; "
+                        + "was given " + token + " instead (valid example: '"
+                        + symbol + "75.0')");
             }
         }
 
         if (token.startsWith("<")) {
+            boolean orEqual = token.substring(1).startsWith("=");
             try {
-                double score = Double.parseDouble(token.substring(1));
+                double score = Double.parseDouble(token.substring(orEqual ? 2 : 1));
 
                 if (student.getFeedback() == null) {
                     return false;
                 }
 
-                return negate != (student.getFeedback().getGrade() < score);
+                if (orEqual) {
+                    return negate != (student.getFeedback().getGrade() <= score);
+                } else {
+                    return negate != (student.getFeedback().getGrade() < score);
+                }
             }
 
             catch (final NumberFormatException e) {
-                throw new RuntimeException("Filter specifier <... requires a number " +
-                        "immediately thereafter; was given " + token
-                        + " instead (valid example: '<75.0')");
+                String symbol = (orEqual ? ">=" : ">");
+                throw new RuntimeException("Filter specifier " + symbol
+                        + "... requires a number immediately afterward; "
+                        + "was given " + token + " instead (valid example: '"
+                        + symbol + "75.0')");
             }
         }
 
@@ -795,17 +997,21 @@ public class CommandHandler {
     }
 
 
-    private static class StudentSelection implements Iterable<String> {
+    private static class StudentSelection implements Iterable<Student> {
 
-        private ArrayList<String> selectedStudents;
+        private ArrayList<Student> selectedStudents;
 
         public StudentSelection() {
             this.selectedStudents = new ArrayList<>();
         }
 
-        public void addStudent(String name) {
-            if (!selectedStudents.contains(name)) {
-                selectedStudents.add(name);
+        public StudentSelection(Collection<Student> students) {
+            this.selectedStudents = new ArrayList<>(students);
+        }
+
+        public void addStudent(Student student) {
+            if (!selectedStudents.contains(student)) {
+                selectedStudents.add(student);
             }
         }
 
@@ -813,12 +1019,15 @@ public class CommandHandler {
             return this.selectedStudents.contains(name);
         }
 
+        public void sort(SortOrder mode) {
+            this.selectedStudents = mode.sort(this.selectedStudents);
+        }
+
         public ArrayList<String> getNames() {
             ArrayList<String> properNames = new ArrayList<>();
 
-            for (String name : this.selectedStudents) {
-                properNames.add(GREEN +
-                        AutoGrade.accessStudents().get(name).getName() + RESET);
+            for (Student student : this.selectedStudents) {
+                properNames.add(GREEN + student.getName() + RESET);
             }
 
             return properNames;
@@ -826,7 +1035,7 @@ public class CommandHandler {
 
 
         @Override
-        public Iterator<String> iterator() {
+        public Iterator<Student> iterator() {
             return this.selectedStudents.iterator();
         }
     }
