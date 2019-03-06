@@ -39,13 +39,27 @@ import java.security.Permission;
 public class ExitBlocker
      extends SecurityManager {
 
+    /**
+     * This value determines whether ExitBlocker forbids System.exit() calls. This is
+     * necessary since the 'quit' command indirectly calls System.exit() itself.
+     */
+    private boolean permitExit = false;
+
     @Override
     public void checkPermission(Permission perm) {
-        if (perm.getName().startsWith("exitVM")) {
+        if (!permitExit && perm.getName().startsWith("exitVM")) {
             throw new ExitException();
         }
 
-        super.checkPermission(perm);
+        // This is probably not a good idea
+        // backend.checkPermission(perm);
+    }
+
+    /**
+     * Allows AutoGrade itself to exit when the user asks for it.
+     */
+    public void permitExit() {
+        this.permitExit = true;
     }
 
 }
