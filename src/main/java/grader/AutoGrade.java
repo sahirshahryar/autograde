@@ -27,15 +27,18 @@
  */
 package grader;
 
+import grader.articles.ArticleManager;
 import grader.backend.*;
 import grader.flag.FlagParser;
 import grader.flag.FlagSet;
 import grader.frontend.Channel;
 import grader.frontend.CommandHandler;
+import grader.frontend.SortOrder;
 import grader.reflect.InternalCompiler;
 import grader.reflect.ReflectionAssistant;
 import grader.reflect.SourceUtilities;
 import grader.stability.ExitBlocker;
+import grader.stability.ExitException;
 import grader.util.Helper;
 
 import java.io.*;
@@ -65,7 +68,7 @@ public class AutoGrade {
      * This is a debug statement which toggles whether stack traces are printed alongside
      * external error messages.
      */
-    private static final boolean SHOW_STACK_TRACES = true;
+    public static final boolean SHOW_STACK_TRACES = true;
 
     // THE FIELDS BELOW ARE SETTINGS DETERMINED BY FLAGS PASSED TO ./autograde.
 
@@ -190,6 +193,12 @@ public class AutoGrade {
 
 
     /**
+     * Order in which results will be exported to a text file.
+     */
+    private static SortOrder exportSortOrder = SortOrder.LAST_NAME_ASC;
+
+
+    /**
      * This
      */
     private static ArrayList<File> unassociatedFiles = new ArrayList<>();
@@ -199,6 +208,8 @@ public class AutoGrade {
      *
      */
     private static ArrayList<File> byproductFiles = new ArrayList<>();
+
+    private static ArticleManager articles = null;
 
 
     /**
@@ -276,6 +287,10 @@ public class AutoGrade {
         FlagParser args;
         try {
             args = new FlagParser(COMMAND_OPTIONS, array);
+
+            articles = new ArticleManager();
+            InputStream helpFile = AutoGrade.class.getResourceAsStream("/help.txt");
+            articles.addFile(new InputStreamReader(helpFile), false);
         } catch (final RuntimeException e) {
             System.out.println(e.getMessage());
             return;
@@ -547,7 +562,7 @@ public class AutoGrade {
          *
          */
         PrintStream oldOut = System.out;
-        int validGrades = 0, invalidGrades = 0;
+        int validGrades = 0, invalidGrades = 0, duplicatesRemoved = 0;
         for (String studentName : students.keySet()) {
             Student student = students.get(studentName);
 
@@ -561,7 +576,7 @@ public class AutoGrade {
              *
              */
             try {
-                student.cleanUpDuplicates();
+                duplicatesRemoved += student.cleanUpDuplicates();
                 student.setScore(GRADING_SCRIPT.gradeSubmission(student));
 
 
@@ -578,7 +593,7 @@ public class AutoGrade {
             /**
              *
              */
-            catch (final ManualGradingError e) {
+            catch (final ManualGradingError | ExitException e) {
                 System.setOut(oldOut);
                 student.appendException(e);
                 ++invalidGrades;
@@ -598,6 +613,12 @@ public class AutoGrade {
                 students.keySet().size()));
 
         System.out.println();
+
+        if (duplicatesRemoved > 0) {
+            System.out.println("Removed " + duplicatesRemoved + " duplicate "
+                + (duplicatesRemoved == 1 ? "submission" : "submissions")
+                + " from consideration.");
+        }
 
         /**
          *
@@ -625,7 +646,7 @@ public class AutoGrade {
          *
          */
         if (EXPORT_AND_QUIT_AUTOMATICALLY) {
-
+            // TODO
 
             return;
         }
@@ -656,6 +677,16 @@ public class AutoGrade {
         if (!unsuccessfulDeletions.isEmpty()) {
             System.out.println("Could not delete " +
                     Helper.elegantPrintList(unsuccessfulDeletions));
+        }
+
+        /**
+         * Funnily enough, setting a SecurityManager to block System.exit() calls ended
+         * up blocking OUR System.exit() call, too!
+         */
+        SecurityManager sm = System.getSecurityManager();
+
+        if (sm instanceof ExitBlocker) {
+            ((ExitBlocker) sm).permitExit();
         }
 
         System.exit(0);
@@ -774,11 +805,26 @@ public class AutoGrade {
         String line;
 
         do {
-            Channel.INTERACTION.say(RESET + "autograde $ ");
+            Channel.INTERACTION.say(RESET + "autograde $ " + CYAN);
             line = Channel.INTERACTION.ask();
         } while (line.trim().isEmpty());
 
+        Channel.INTERACTION.say(RESET);
+
         return line;
+    }
+
+    public static SortOrder getExportSortOrder() {
+        return exportSortOrder;
+    }
+
+
+    public static void setExportSortOrder(SortOrder newSortOrder) {
+        exportSortOrder = newSortOrder;
+    }
+
+    public static ArticleManager getArticles() {
+        return articles;
     }
 
 
@@ -854,7 +900,9 @@ public class AutoGrade {
      */
     public static int executeCommand(String command) {
         try {
-            return runtime.exec(command).waitFor();
+            int ret = runtime.exec(command).waitFor();
+            System.out.println("Exit code for '" + command + "' = " + ret);
+            return ret;
         }
 
         catch (final InterruptedException | IOException e) {

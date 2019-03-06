@@ -27,9 +27,12 @@
  */
 package grader.articles;
 
+import grader.frontend.Color;
 import grader.util.Helper;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * @author  Sahir Shahryar
@@ -41,6 +44,12 @@ public class EmbeddedMap {
     private String name;
 
     private HashMap<String, String> content;
+
+    private ArrayList<String> contentOrder;
+
+    private EmbeddedMap() {
+
+    }
 
     public EmbeddedMap(String name, String unrefinedBody) {
         this.name = name;
@@ -56,13 +65,88 @@ public class EmbeddedMap {
         return this.name;
     }
 
+    public EmbeddedMap combineWith(String name, HashMap<String, String> map,
+                                   ArrayList<String> order) {
+        EmbeddedMap result = new EmbeddedMap();
+        result.name = name;
+
+        result.content = new HashMap<>();
+        result.content.putAll(this.content);
+        result.content.putAll(map);
+
+        result.contentOrder = new ArrayList<>(this.contentOrder);
+        result.contentOrder.addAll(order);
+
+        return result;
+    }
+
     private HashMap<String, String> parseMap(String unrefined) {
-        return new HashMap<>();
+        HashMap<String, String> result = new HashMap<>();
+
+        this.contentOrder = new ArrayList<>();
+        String[] split = unrefined.split("\\n");
+
+        String latestKey = null, latestValue = null;
+        boolean previousLineEmpty = false;
+
+        for (String line : split) {
+            if (line.trim().toUpperCase().startsWith("(KEY)")) {
+                previousLineEmpty = false;
+
+                if (latestKey != null && latestValue != null && !latestValue.isEmpty()) {
+                    result.put(latestKey, latestValue);
+                    contentOrder.add(latestKey);
+                    latestValue = null;
+                }
+
+                latestKey = line.trim().substring(5);
+
+                if (latestKey.isEmpty()) {
+                    throw new IllegalArgumentException("Map key-value pair has no key");
+                }
+            }
+
+            if (line.trim().toUpperCase().startsWith("(VALUE)")) {
+                previousLineEmpty = false;
+                if (latestValue == null) {
+                    latestValue = line.substring(line.toUpperCase().indexOf("(VALUE)") + 7);
+                } else {
+                    throw new IllegalArgumentException("Attempted to define value for " +
+                            "key-value pair before its key");
+                }
+
+                continue;
+            }
+
+            if (latestValue == null) {
+                continue;
+            }
+
+            if (line.isEmpty()) {
+                if (previousLineEmpty) {
+                    latestValue += "\n";
+                } else {
+                    latestValue += " ";
+                }
+
+                previousLineEmpty = true;
+            } else {
+                previousLineEmpty = false;
+                latestValue += " " + line.trim();
+            }
+        }
+
+        if (latestKey != null && latestValue != null) {
+            result.put(latestKey, latestValue);
+            contentOrder.add(latestKey);
+        }
+
+        return result;
     }
 
 
     public String toString() {
-        return Helper.elegantPrintMap(content);
+        return Helper.elegantPrintMap(content, contentOrder);
     }
 
 }

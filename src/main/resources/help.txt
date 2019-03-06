@@ -33,19 +33,16 @@
 // @version 1.0.0
 //
 
-let DELETE_ARGS:   Map = #delete-args   + FLAGS:delete
 let DESELECT_ARGS: Map = #deselect-args + FLAGS:deselect
-let EXIT_ARGS:     Map = #exit-args     + FLAGS:exit
 let EXPORT_ARGS:   Map = #export-args   + FLAGS:export
 let FILE_ARGS:     Map = #file-args     + FLAGS:file
-let HELP_ARGS:     Map = #help-args     + FLAGS:help
 let RUN_ARGS:      Map = #run-args      + FLAGS:run
 let SELECT_ARGS:   Map = #select-args   + FLAGS:select
-let SAVE_ARGS:     Map = #save-args     + FLAGS:save
-let SORT_ARGS:     Map = #sort-args     + FLAGS:sort
-let VIEW_ARGS:     Map = #view-args     + FLAGS:view
+// let SAVE_ARGS:     Map = #save-args     + FLAGS:save
+// let SORT_ARGS:     Map = #sort-args     + FLAGS:sort
+// let VIEW_ARGS:     Map = #view-args     + FLAGS:view
 
-let HELP_BASE: Article = #base + #fundamentals
+// let HELP_BASE: Article = #base + #fundamentals
 
 # base: Article
 (GREEN)Command list:
@@ -63,7 +60,7 @@ between them. While this doesn't quite function the same way as it does in bash 
 shells, it does mute the output of all but the last command, and when combined with each
 command's shorthand version, is a very fast way to work with AutoGrade. So, for example,
 to perform an entire export workflow, you could type the command
-(CYAN)s * | e grades.txt | q(RESET).
+(CYAN)s * | x grades.txt | q(RESET).
 
 
 # delete: Article
@@ -82,8 +79,7 @@ Deletes the submission files of the selected students.
 
 > Flags:
 
-(MAP:DELETE_ARGS)
-
+(FLAGS:delete)
 
 
 
@@ -108,7 +104,7 @@ student you didn't intend to select.
 
 
 # deselect-args: Map
-(KEY)<filter|*>
+(KEY)<filter|\*>
 (VALUE)A filter specifying which students should be deselected, or `*` to deselect all
 students. See *help* *select* to see how to use the filter syntax here.
 
@@ -116,43 +112,31 @@ students. See *help* *select* to see how to use the filter syntax here.
 
 
 # exit: Article
-Exits the program.
-
+Exits the program. Note that calling *exit* will not automatically export the program's
+results.
 
 > Aliases:
 
     (ALIASES:exit)
 
-
 > Syntax:
 
-    $ (YELLOW)exit [--discard] [--files-too]
-
-> Flags:
-
-(MAP:EXIT_FLAGS)
-
-
-
+    $ (YELLOW)exit
 
 # export: Article
 Exports the selected students' grades to a file or directory of your choice.
-
 
 > Aliases:
 
     (ALIASES:export)
 
-
 > Syntax:
 
-    $ (YELLOW)export [<file>|<dir>/] [--overwrite] [--grades-only|--no-source-names]
-
+    $ (YELLOW)export [<file>|<dir>/] [flags...]
 
 > Arguments:
 
 (MAP:EXPORT_ARGS)
-
 
 Note that *--grades-only* and *--no-source-names* cannot be used at the same time, since
 they contradict each other (*--no-source-names* is only applicable when auto-generated
@@ -172,16 +156,13 @@ by explicitly putting a forward slash (`/`) at the end of the name.
 # file: Article
 Prints the contents of the given file, or opens them in a text editor.
 
-
 > Aliases:
 
     (ALIASES:file)
 
-
 > Syntax:
 
     $ (YELLOW)file [<student>/<name>] [--emacs|--vi]
-
 
 (CYAN)Arguments:
 
@@ -194,7 +175,6 @@ made, AutoGrade will attempt to find the *pygmentize* command, printing the file
 the terminal with syntax highlighting. If it's not available, *cat* will be used instead.
 Naturally, the *--emacs* and *--vi* flags cannot be used at the same time as each other.
 
-
 # file-args: Map
 (KEY)[<student>/<name>]
 (VALUE)The student's name (if more than one student is selected), and the name of the
@@ -203,9 +183,6 @@ without issue as long as you give enough information for it to resolve to exactl
 file. If only one student is selected and that student has only one file, simply typing
 *file* will work just fine.
 
-
-
-
 # help: Article
 Shows command usage.
 
@@ -213,32 +190,25 @@ Shows command usage.
 
     (ALIASES:help)
 
-
 > Syntax:
 
     $ (YELLOW)help [<command>]
 
-
 > Arguments:
 
 (MAP:HELP_ARGS)
-
 
 # help-args: Map
 (KEY)[<command>]
 (VALUE)The command to get information for. Omit this argument to see basic information
 about AutoGrade.
 
-
-
 # list: Article
 Provides a list of all students that can be selected.
-
 
 > Aliases:
 
     (ALIASES:list)
-
 
 > Syntax:
 
@@ -247,22 +217,17 @@ Provides a list of all students that can be selected.
 # run: Article
 Runs a student's submission individually.
 
-
 > Aliases:
 
     (ALIASES:run)
-
 
 > Syntax:
 
     $ (YELLOW)run [<student>] [--manual|--stepped]
 
-
 > Arguments:
 
 (MAP:RUN_ARGS)
-
-
 
 # run-args: Map
 (KEY)[<student>]
@@ -271,37 +236,29 @@ only one student selected via the *select* command, then this argument is not ne
 Otherwise, specify a student using the same syntax as for the *select* command. If more
 than one student matches your selection, only the first one will be used.
 
-
-
 # select: Article
 Selects the given students for editing with the other commands.
-
 
 > Aliases:
 
     (ALIASES:select)
 
-
 > Syntax:
 
     $ (YELLOW)select <filter|*> [--invert] [--append]
 
-
 > Arguments:
 
-(MAP:SELECTOR_ARGS)
-
+(MAP:SELECT_ARGS)
 
 > Selector syntax:
 
 First and foremost, it is entirely possible to use spaces in the filter, so typing full
 names such as (CYAN)select John Doe(RESET) will work just fine.
 
-
 You can use the following syntax elements to select multiple students at once:
 
-(MAP:#selector-syntax)
-
+(MAP:selector-syntax)
 
 Once you find a few of those useful, you can use multiple selectors in conjunction by
 separating them with commas. So, for example, using (CYAN)select @incomplete, <50(RESET)
@@ -311,8 +268,8 @@ Commas represent a logical OR; semicolons can be used for a logical AND. So, usi
 OR takes precedence over AND, and there is no grouping.
 
 
-# selector-args: Map
-(KEY)<filter|*>
+# select-args: Map
+(KEY)<filter|\*>
 (VALUE)A filter specifying which students should be selected, or `*` to select all
 students.
 
@@ -331,8 +288,12 @@ students.
 choosing).
 (KEY)>[grade]
 (VALUE)Selects all students whose score is greater than *grade*.
+(KEY)>=[grade]
+(VALUE)Selects all students whose score is greater than or equal to *grade*.
 (KEY)<[grade]
 (VALUE)Selects all students whose score is less than *grade*.
+(KEY)<=[grade]
+(VALUE)Selects all students whose score is less than or equal to *grade*.
 (KEY)![selector]
 (VALUE)Negates the given selector, which can be any of the conditions above. For example,
 using *!<50* (score not less than 50) chooses all scores greater than or equal to 50.
@@ -351,11 +312,9 @@ deletion, so you do not need to manually save submissions that couldn't be grade
 
     (ALIASES:save)
 
-
 > Syntax:
 
     $ (YELLOW)save [<<student>/<file>>|*]
-
 
 > Arguments:
 
@@ -364,7 +323,7 @@ deletion, so you do not need to manually save submissions that couldn't be grade
 
 
 # save-args: Map
-(KEY)[<<student>/<file>>|*]
+(KEY)[<<student>/<file>>|\*]
 (VALUE)Optionally, you can provide a specific file (or files) to save. Use `*` to save
 all files. If you specify just a file, that file will be saved for all students in your
 selection. If you specify just a name (type in the student's name, followed by a slash),
@@ -374,5 +333,5 @@ all files from all selected students will be saved.
 
 
 
-# sort:
+# sort: Article
 Sorts the current selection by either name or grade.

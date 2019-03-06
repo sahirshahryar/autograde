@@ -35,6 +35,9 @@ import grader.reflect.SourceUtilities;
 import grader.util.Helper;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.Reader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -49,9 +52,11 @@ public class ArticleManager {
 
     private HashMap<String, Article> articles;
 
-    private HashMap<String, EmbeddedMap> maps;
+    public HashMap<String, EmbeddedMap> maps;
 
     private HashMap<String, String> variables;
+
+    private ArrayList<String> pendingSummationDeclarations = new ArrayList<>();
 
     public ArticleManager() {
         this.articles = new HashMap<>();
@@ -70,17 +75,23 @@ public class ArticleManager {
         this.variables.put(variable, value);
     }
 
-    public void addFile(File file) throws RuntimeException {
+    public void addFile(File file, boolean postponeAllowed) throws RuntimeException {
+        try {
+            addFile(new FileReader(file), postponeAllowed);
+        } catch (final FileNotFoundException e) {
+            throw new RuntimeException(e.getMessage());
+        }
+    }
+
+    public void addFile(Reader r, boolean postponeAllowed) throws RuntimeException {
         ArrayList<String> lines;
 
         try {
-            lines = SourceUtilities.getLines(file);
+            lines = SourceUtilities.getLines(r, false);
         } catch (final ManualGradingError e) {
-            throw new RuntimeException("Error generating articles from file '"
-                    + file.getName() + "': contents could not be read");
+            throw new RuntimeException(e.getMessage(), e);
         }
 
-        ArrayList<String> summationDeclarations = new ArrayList<>();
         ArrayList<String> textBodies = new ArrayList<>();
 
         String currentHeading = null, currentText = "";
@@ -92,11 +103,11 @@ public class ArticleManager {
             }
 
             if (line.trim().startsWith("let ")) {
-                summationDeclarations.add(line);
+                this.pendingSummationDeclarations.add(line);
                 continue;
             }
 
-            if (line.trim().matches("# ?[a-zA-Z0-9\\-_$]: ?(Article|Map)")) {
+            if (line.trim().matches("# ?[a-zA-Z0-9\\-_$]+: ?(Article|Map)")) {
                 if (currentHeading != null) {
                     textBodies.add(currentHeading + "\n" + currentText);
                 }
@@ -111,7 +122,7 @@ public class ArticleManager {
                 continue;
             }
 
-            currentText += line;
+            currentText += "\n" + line;
         }
 
         for (String textBody : textBodies) {
@@ -130,7 +141,53 @@ public class ArticleManager {
                 this.addMap(newMap);
             }
         }
+
+        ArrayList<String> successfulSummations = new ArrayList<>();
+        for (String declaration : this.pendingSummationDeclarations) {
+            String[] elements = declaration.split(" *[+=:] *", 4);
+
+            if (elements.length != 4) {
+                throw new RuntimeException("Malformed summation '" + declaration + "'");
+            }
+
+            String title = elements[0].substring(elements[0].indexOf(" ") + 1);
+
+            if (!elements[1].equalsIgnoreCase("Map")) {
+                throw new IllegalArgumentException("Cannot sum up anything except " +
+                        "Maps (" + declaration + ")");
+            }
+
+            String leftName = elements[2].substring(1);
+            if (!maps.containsKey(leftName)) {
+                if (postponeAllowed) {
+                    continue;
+                } else {
+                    throw new IllegalArgumentException("Unknown map '"
+                            + elements[2] + "'");
+                }
+            }
+
+            EmbeddedMap left = maps.get(leftName);
+
+            String right = elements[3];
+            if (right.startsWith("FLAGS:")) {
+                String label = right.split(":", 2)[1];
+                if (CommandHandler.COMMAND_FLAGSETS.containsKey(label)) {
+                    FlagSet f = CommandHandler.COMMAND_FLAGSETS.get(label);
+                    EmbeddedMap result
+                            = left.combineWith(title, f.flagDescriptions(),
+                                               f.orderForArticles());
+                    this.maps.put(title, result);
+                    successfulSummations.add(declaration);
+                } else {
+                    throw new IllegalArgumentException("No flags for '" + label + "'");
+                }
+            }
+        }
+
+        this.pendingSummationDeclarations.removeAll(successfulSummations);
     }
+
 
 
     public String getElement(String title) {
@@ -143,7 +200,9 @@ public class ArticleManager {
                         throw new IllegalArgumentException("No article '" + split[1] + "'");
                     }
 
-                    return articles.get(split[1]).getText();
+                    Article article = articles.get(split[1]);
+                    article.resolveBodyElements(this);
+                    return article.getText();
 
                 case "MAPS":
                 case "MAP":
@@ -160,8 +219,13 @@ public class ArticleManager {
                     }
 
                     String[] array = CommandHandler.COMMAND_ALIASES.get(split[1]);
-                    List<String> aliases = Arrays.asList(array);
-                    return Helper.elegantPrintList(aliases);
+                    List<String> aliases = new ArrayList<>();
+
+                    for (String alias : array) {
+                        aliases.add(Color.YELLOW + alias + Color.RESET);
+                    }
+
+                    return Helper.elegantPrintList(aliases, true);
 
                 case "FLAGS":
                 case "FLAG":
@@ -183,7 +247,7 @@ public class ArticleManager {
             }
         }
 
-        throw new IllegalArgumentException("Unknown documentation symbol '" + title + "'");
+        return "(" + title + ")";
     }
 
 }

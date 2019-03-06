@@ -27,8 +27,10 @@
  */
 package grader.articles;
 
+import grader.frontend.Color;
 import grader.util.Helper;
 
+import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -46,13 +48,15 @@ public class Article {
     private static final String
             EMPHASIS_BLUE_MATCHER = regexForGroupingChars('*', '*', ".*?"),
             EMPHASIS_YELLOW_MATCHER = regexForGroupingChars('`', '`', ".*?"),
-            SYMBOL_REFERENCE_MATCHER = regexForGroupingChars('(', ')', "[^ ]*?");
+            SYMBOL_REFERENCE_MATCHER = regexForGroupingChars('(', ')', "[^ ]*?"),
+            LOOKBEHIND_ASSERTION = "(?<!(?<!\\\\)\\\\)";
 
 
     String title;
 
     String body;
 
+    private ArrayList<String> unresolvableElements = new ArrayList<>();
 
     public Article(String title, String unrefinedBody) {
         this.title = title;
@@ -100,20 +104,36 @@ public class Article {
             Pattern resolveSymbolReferences = Pattern.compile(SYMBOL_REFERENCE_MATCHER);
             Matcher matcher = resolveSymbolReferences.matcher(this.body);
 
-            if (matcher.find()) {
-                int start = matcher.start(), end = matcher.end();
-                String match = matcher.group();
+            int start = -1, end = -1;
+            String match = null;
+            while (matcher.find()) {
+                if (!unresolvableElements.contains(matcher.group())) {
+                    start = matcher.start();
+                    end = matcher.end();
+                    match = matcher.group();
 
+                    break;
+                }
+            }
+
+            if (start != -1) {
                 String reference = match.substring(1, match.length() - 1);
                 if (reference.equalsIgnoreCase("ARTICLE:" + this.title)) {
                     throw new IllegalArgumentException("An article cannot reference itself");
                 } else {
+                    String resolvedElem = references.getElement(reference);
+
                     this.body = this.body.substring(0, start)
-                              + references.getElement(reference)
-                              + this.body.substring(end);
+                            + resolvedElem
+                            + this.body.substring(end);
 
                     // RECURSIVE CALL
+                    if (resolvedElem.equals("(" + reference + ")")) {
+                        unresolvableElements.add("(" + reference + ")");
+                    }
+
                     this.resolveBodyElements(references);
+                    return;
                 }
             }
         }
@@ -144,9 +164,13 @@ public class Article {
                 split[i] = line.replaceFirst("> ", BLUE + "");
             }
         }
-        this.body = Helper.join("\n", split);
 
-        
+        this.body = Helper.join("\n", split);
+        this.body = this.body.replaceAll(LOOKBEHIND_ASSERTION + "\\\\\\*", "*");
+
+        this.body = Color.RESET + this.body.replaceAll("\\n *\\n *\\n", "\n\n")
+                                           .replaceFirst("\\u001B\\[0m", "")
+                                           .trim();
     }
 
 
@@ -160,8 +184,6 @@ public class Article {
 
 
     private static String regexForGroupingChars(char start, char end, String midPattern) {
-        final String lookbehindAssertion = "(?<!(?<!\\\\)\\\\)";
-
         String startString = "" + start, endString = "" + end;
 
         if (Helper.charAnyOf(start, '*', '.', '+', '?', '[', ']', '(', ')', '{', '}')) {
@@ -172,8 +194,8 @@ public class Article {
             endString = "\\" + endString;
         }
 
-        return lookbehindAssertion + startString + midPattern
-             + lookbehindAssertion + endString;
+        return LOOKBEHIND_ASSERTION + startString + midPattern
+             + LOOKBEHIND_ASSERTION + endString;
     }
 
 

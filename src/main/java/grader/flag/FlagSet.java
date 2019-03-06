@@ -27,6 +27,7 @@
  */
 package grader.flag;
 
+import grader.frontend.Color;
 import grader.util.Helper;
 import grader.util.Tuple;
 
@@ -226,9 +227,12 @@ public class FlagSet
 
         for (Tuple<Flag, Flag> tuple : this.disallowedCombos) {
             if (tuple.has(f)) {
-                throw new RuntimeException("The options " + makeFlagText(flag) + " and "
-                                           + makeFlagText(tuple.other(f).toString())
-                                           + " cannot be used in conjunction");
+                Flag second = (Flag) tuple.other(f);
+                if (this.hasFlag(second.getFlag())) {
+                    throw new RuntimeException("The options " + makeFlagText(flag)
+                            + " and " + makeFlagText(second.getFlag())
+                            + " cannot be used in conjunction.");
+                }
             }
         }
     }
@@ -236,7 +240,8 @@ public class FlagSet
     public FlagSet flagUsed(String flag, String value) {
         Flag f = this.resolve(flag);
         if (f == null) {
-            throw new RuntimeException("flagUsed() called before validation (?????)");
+            throw new RuntimeException("flagUsed() called before validation " +
+                    "(????? that probably should not happen)");
         }
         
         flagData.put(f.getFlag(), new Flag(f.getFlag(), value));
@@ -295,7 +300,8 @@ public class FlagSet
             ArrayList<String> names = new ArrayList<>();
 
             for (String flagAlias : flag.allKeys()) {
-                names.add((flagAlias.length() > 1 ? "--" : "-") + flagAlias);
+                names.add(Color.CYAN + (flagAlias.length() > 1 ? "--" : "-")
+                          + flagAlias + Color.RESET);
             }
 
             String term = Helper.elegantPrintList(names, true);
@@ -307,6 +313,34 @@ public class FlagSet
         }
 
         return result;
+    }
+
+    public ArrayList<String> orderForArticles() {
+        ArrayList<String> result = new ArrayList<>();
+
+        for (String key : this.validFlags.keySet()) {
+            Flag flag = this.validFlags.get(key);
+            ArrayList<String> names = new ArrayList<>();
+
+            for (String flagAlias : flag.allKeys()) {
+                names.add(Color.CYAN + (flagAlias.length() > 1 ? "--" : "-")
+                        + flagAlias + Color.RESET);
+            }
+
+            String term = Helper.elegantPrintList(names, true);
+            if (flag.getType() == FlagType.VALUED) {
+                term += " " + flag.getParamName();
+            }
+
+            result.add(term);
+        }
+
+        return result;
+    }
+
+
+    public void clear() {
+        this.flagData.clear();
     }
 
     @Override

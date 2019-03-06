@@ -26,6 +26,11 @@
  * IN THE SOFTWARE.
  */
 import grader.articles.Article;
+import grader.articles.ArticleManager;
+import grader.articles.EmbeddedMap;
+
+import java.io.File;
+import java.util.HashMap;
 
 /**
  * @author  Sahir Shahryar <sahirshahryar@uga.edu>
@@ -35,12 +40,13 @@ import grader.articles.Article;
 public class ArticleTest {
 
     public static void main(String[] args) {
-        String unrefinedBody = "Hello guys this is a *simple* test\nof how the article " +
-                "parser works.\n\nI wonder if it will work properly!";
+        ArticleManager articleManager = new ArticleManager();
 
-        Article a = new Article("test", unrefinedBody);
-        a.resolveBodyElements(null);
-        System.out.println(a.getText());
+        File f = new File("/Users/sahirshahryar/Documents/Projects/AutoGrade/src/main/resources/help.txt");
+        articleManager.addFile(f, false);
+
+        String content = articleManager.getElement("ARTICLE:export");
+        System.out.println(content);
     }
 
 }

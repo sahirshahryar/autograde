@@ -86,4 +86,20 @@ public enum Color {
     public String toString() {
         return AutoGrade.SHOW_COLORS ? this.code : "";
     }
+
+    public static int trueLength(String input) {
+        int len = 0;
+        for (int i = 0; i < input.length(); ++i) {
+            if (input.charAt(i) == '\u001B') {
+                if ((i + 2) < input.length()) {
+                    i += input.charAt(i + 2) == '0' ? 3 : 4;
+                }
+            } else if (input.charAt(i) != '\\') {
+                ++len;
+            }
+        }
+
+        return len;
+    }
+
 }

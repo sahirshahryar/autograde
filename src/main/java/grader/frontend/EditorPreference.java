@@ -34,33 +34,32 @@ import grader.AutoGrade;
  * @version 1.0.0
  */
 public enum EditorPreference {
-    EMACS,
-    VI,
-    NONE;
+    EMACS, VI, NONE;
+
+    /**
+     *
+     */
+    public static EditorPreference PREFERENCE = VI;
 
 
     /**
      *
      */
-    public static EditorPreference PREFERENCE;
+    public void openEditor(String args) {
+        args = args.replace(" ", "\\ ");
 
-
-    /**
-     *
-     */
-    public void openEditor() {
         boolean useColor = AutoGrade.SHOW_COLORS;
         switch (this) {
             case EMACS:
-                
+                AutoGrade.executeCommand("/usr/bin/emacs " + args);
                 break;
 
             case VI:
-
+                AutoGrade.executeCommand("sudo dtruss /usr/bin/vim +q");
                 break;
 
             case NONE:
-
+                AutoGrade.executeCommand("/usr/bin/cat " + args);
                 break;
         }
     }

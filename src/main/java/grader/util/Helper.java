@@ -28,6 +28,7 @@
 package grader.util;
 
 import grader.frontend.Color;
+import grader.frontend.CommandHandler;
 
 import java.util.*;
 
@@ -237,6 +238,12 @@ public final class Helper {
         }
     }
 
+    public static String elegantPrintMap(Map<String, String> map,
+                                         Iterable<String> order) {
+        return elegantPrintMap(map, order, "  ", "  ",
+                               Color.CYAN, Color.RESET, 80, true);
+    }
+
 
     /**
      *
@@ -244,7 +251,9 @@ public final class Helper {
      * @return
      */
     public static String elegantPrintMap(Map<String, String> map) {
-        return elegantPrintMap(map, "  ", "  ", true, Color.CYAN, Color.RESET, 80, true);
+        ArrayList<String> order = new ArrayList<>(map.keySet());
+        Collections.sort(order);
+        return elegantPrintMap(map, order);
     }
 
 
@@ -253,25 +262,32 @@ public final class Helper {
      * @param map
      * @param lMargin
      * @param rMargin
-     * @param sort
      * @param keyColor
      * @param valueColor
      * @param overallWidth
      * @param hardWrap
      * @return
      */
-    public static String elegantPrintMap(Map<String, String> map,
+    public static String elegantPrintMap(Map<String, String> map, Iterable<String> order,
                                          String lMargin, String rMargin,
-                                         boolean sort,
                                          Color keyColor, Color valueColor,
                                          int overallWidth, boolean hardWrap) {
         // wew lad
-        String widestTerm = map.keySet()
+        /* String widestTerm = map.keySet()
                                .stream()
-                               .max(Comparator.comparing(String::length))
+                               .max(Comparator.comparing(Color::trueLength))
                                .get();
+                                so sad this doesn't work any more */
 
-        int maxWidth = widestTerm.length();
+        int maxWidth = -1;
+        String widestTerm = null;
+        for (String key : map.keySet()) {
+            int width = Color.trueLength(key);
+            if (width > maxWidth) {
+                maxWidth = width;
+                widestTerm = key;
+            }
+        }
 
         if (maxWidth >= overallWidth) {
             throw new IllegalArgumentException("Dictionary term '" +
@@ -284,14 +300,7 @@ public final class Helper {
 
         StringBuilder result = new StringBuilder();
 
-        ArrayList<String> keys = new ArrayList<>();
-        keys.addAll(map.keySet());
-
-        if (sort) {
-            Collections.sort(keys);
-        }
-        
-        for (String term : keys) {
+        for (String term : order) {
             result.append('\n')
                   .append(lMargin)
                   .append(keyColor)
@@ -339,7 +348,7 @@ public final class Helper {
      * @return
      */
     private static String padRightAlign(String text, int width) {
-        return generateSpaces(width - text.length()) + text;
+        return generateSpaces(width - Color.trueLength(text)) + text;
     }
 
 

@@ -30,10 +30,7 @@ package grader.reflect;
 import grader.AutoGrade;
 import grader.backend.ManualGradingError;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
 import java.util.ArrayList;
 
 /**
@@ -168,9 +165,18 @@ public class SourceUtilities {
         }
     }
 
-
     public static ArrayList<String> getLines(File file) throws ManualGradingError {
         return getLines(file, false);
+    }
+
+
+    public static ArrayList<String> getLines(File file, boolean fixPackage)
+            throws ManualGradingError {
+        try {
+            return getLines(new FileReader(file), fixPackage);
+        } catch (final FileNotFoundException e) {
+            throw new ManualGradingError(e.getMessage());
+        }
     }
 
     /**
@@ -179,11 +185,10 @@ public class SourceUtilities {
      * @return
      * @throws ManualGradingError
      */
-    public static ArrayList<String> getLines(File file, boolean fixPackage)
+    public static ArrayList<String> getLines(Reader is, boolean fixPackage)
             throws ManualGradingError {
         try {
-            BufferedReader stream
-                    = new BufferedReader(new FileReader(file));
+            BufferedReader stream = new BufferedReader(is);
             ArrayList<String> lines = new ArrayList<>();
 
             String line;
